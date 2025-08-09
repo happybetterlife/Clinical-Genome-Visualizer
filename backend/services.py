@@ -16,13 +16,11 @@ import numpy as np
 import pandas as pd
 import requests
 import aiohttp
-from Bio import PDB, SeqIO
-from Bio.PDB import PDBParser, DSSP
-from Bio.Seq import Seq
 # Optional dependencies - will be imported when needed
+# from Bio import PDB, SeqIO
+# from Bio.PDB import PDBParser, DSSP
 # import mdtraj as md
 # from rdkit import Chem
-# from rdkit.Chem import AllChem
 # import torch
 # import joblib
 
@@ -53,7 +51,6 @@ class StructureService:
     }
     
     def __init__(self):
-        self.pdb_parser = PDBParser(QUIET=True)
         self.base_url = os.getenv('RCSB_PDB_API', 'https://files.rcsb.org')
         self.alphafold_url = os.getenv('ALPHAFOLD_API', 'https://alphafold.ebi.ac.uk')
         
@@ -99,97 +96,84 @@ class StructureService:
             return None
     
     def _parse_pdb(self, pdb_content: str, pdb_id: str) -> Dict[str, Any]:
-        """Parse PDB content and extract structure data"""
+        """Parse PDB content and extract real structure data"""
         
-        # Save to temporary file for parsing
-        import tempfile
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.pdb', delete=False) as f:
-            f.write(pdb_content)
-            temp_path = f.name
+        atoms = []
+        colors = []
+        chains = {}
         
-        try:
-            # Parse with BioPython
-            structure = self.pdb_parser.get_structure(pdb_id, temp_path)
-            
-            atoms = []
-            colors = []
-            chains = {}
-            
-            # Atom type to color mapping
-            atom_colors = {
-                'C': [0.5, 0.5, 0.5],  # Gray
-                'N': [0.0, 0.0, 1.0],  # Blue
-                'O': [1.0, 0.0, 0.0],  # Red
-                'S': [1.0, 1.0, 0.0],  # Yellow
-                'P': [1.0, 0.5, 0.0],  # Orange
-            }
-            
-            for model in structure:
-                for chain in model:
-                    chain_id = chain.get_id()
-                    chains[chain_id] = {'residues': []}
+        # Atom type to color mapping
+        atom_colors = {
+            'C': [0.5, 0.5, 0.5],  # Gray
+            'N': [0.0, 0.0, 1.0],  # Blue
+            'O': [1.0, 0.0, 0.0],  # Red
+            'S': [1.0, 1.0, 0.0],  # Yellow
+            'P': [1.0, 0.5, 0.0],  # Orange
+        }
+        
+        lines = pdb_content.split('\n')
+        
+        for line in lines:
+            if line.startswith('ATOM'):
+                try:
+                    x = float(line[30:38].strip())
+                    y = float(line[38:46].strip())
+                    z = float(line[46:54].strip())
+                    element = line[76:78].strip() or 'C'
+                    chain_id = line[21:22].strip() or 'A'
+                    res_num = int(line[22:26].strip())
+                    res_name = line[17:20].strip()
                     
-                    for residue in chain:
-                        res_id = residue.get_id()[1]
-                        res_name = residue.get_resname()
-                        
+                    atoms.append([x, y, z])
+                    color = atom_colors.get(element, [0.5, 0.5, 0.5])
+                    colors.append(color)
+                    
+                    if chain_id not in chains:
+                        chains[chain_id] = {'residues': []}
+                    
+                    residue_exists = any(r['id'] == res_num for r in chains[chain_id]['residues'])
+                    if not residue_exists:
                         chains[chain_id]['residues'].append({
-                            'id': res_id,
+                            'id': res_num,
                             'name': res_name
                         })
                         
-                        for atom in residue:
-                            coord = atom.get_coord().tolist()
-                            atoms.append(coord)
-                            
-                            element = atom.element.strip() if atom.element else 'C'
-                            color = atom_colors.get(element, [0.5, 0.5, 0.5])
-                            colors.append(color)
-            
-            # Calculate secondary structure with DSSP if available
-            secondary_structure = self._calculate_secondary_structure(structure)
-            
-            return {
-                'atoms': atoms,
-                'colors': colors,
-                'chains': chains,
-                'secondary_structure': secondary_structure,
-                'atom_count': len(atoms),
-                'chain_count': len(chains)
-            }
-            
-        finally:
-            # Clean up temp file
-            os.unlink(temp_path)
+                except (ValueError, IndexError):
+                    continue
+        
+        return {
+            'atoms': atoms,
+            'colors': colors,
+            'chains': chains,
+            'secondary_structure': self._parse_secondary_structure(lines),
+            'atom_count': len(atoms),
+            'chain_count': len(chains)
+        }
     
-    def _calculate_secondary_structure(self, structure) -> Optional[Dict[str, Any]]:
-        """Calculate secondary structure using DSSP"""
+    def _parse_secondary_structure(self, lines: List[str]) -> Dict[str, Any]:
+        """Parse secondary structure from PDB HELIX and SHEET records"""
+        secondary = {
+            'helix': [],
+            'sheet': [],
+            'loop': []
+        }
+        
         try:
-            model = structure[0]
-            dssp = DSSP(model, '')  # Would need actual DSSP binary
+            for line in lines:
+                if line.startswith('HELIX'):
+                    start_res = int(line[21:25].strip())
+                    end_res = int(line[33:37].strip())
+                    secondary['helix'].extend(range(start_res, end_res + 1))
+                    
+                elif line.startswith('SHEET'):
+                    start_res = int(line[22:26].strip())
+                    end_res = int(line[33:37].strip())
+                    secondary['sheet'].extend(range(start_res, end_res + 1))
+                    
+        except (ValueError, IndexError):
+            pass
             
-            secondary = {
-                'helix': [],
-                'sheet': [],
-                'loop': []
-            }
-            
-            for key in dssp.keys():
-                ss_type = dssp[key][2]
-                residue_id = key[1][1]
-                
-                if ss_type == 'H':
-                    secondary['helix'].append(residue_id)
-                elif ss_type == 'E':
-                    secondary['sheet'].append(residue_id)
-                else:
-                    secondary['loop'].append(residue_id)
-            
-            return secondary
-            
-        except Exception as e:
-            logger.warning(f"Could not calculate secondary structure: {str(e)}")
-            return None
+        return secondary
     
     async def fetch_alphafold(self, gene: str) -> Optional[Dict[str, Any]]:
         """Fetch AlphaFold structure"""

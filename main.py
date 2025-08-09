@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import json
 from datetime import datetime
 
@@ -137,21 +138,63 @@ elif page == "3D Visualization":
     
     with col2:
         st.subheader("Mol* 3D Viewer")
-        st.info("🔄 Mol* WebGL viewer would be embedded here")
-        st.code("""
-// Mol* viewer integration
-const viewer = new molstar.Viewer('mol-container', {
-    layoutIsExpanded: false,
-    layoutShowControls: false,
-    layoutShowRemoteState: false,
-    layoutShowSequence: true,
-    layoutShowLog: false,
-    layoutShowLeftPanel: true,
-    viewportShowExpand: true,
-    viewportShowSelectionMode: false,
-    viewportShowAnimation: false
-});
-        """, language="javascript")
+        
+        # Create HTML with Mol* viewer
+        mol_html = f"""
+        <div style="width: 100%; height: 500px; border: 1px solid #ddd; border-radius: 5px;">
+            <div id="mol-container" style="width: 100%; height: 100%;"></div>
+        </div>
+        
+        <script src="https://unpkg.com/molstar@latest/build/viewer/molstar.js"></script>
+        <script>
+            // Initialize Mol* viewer
+            const viewer = new molstar.Viewer('mol-container', {{
+                layoutIsExpanded: false,
+                layoutShowControls: true,
+                layoutShowRemoteState: false,
+                layoutShowSequence: true,
+                layoutShowLog: false,
+                layoutShowLeftPanel: true,
+                viewportShowExpand: true,
+                viewportShowSelectionMode: false,
+                viewportShowAnimation: false
+            }});
+            
+            // Load structure based on selected gene
+            const geneStructures = {{
+                'BRCA1': '1jm7',
+                'BRCA2': '1miu', 
+                'TP53': '1tup',
+                'EGFR': '2ity',
+                'KRAS': '4obe'
+            }};
+            
+            const pdbId = geneStructures['{gene}'] || '1jm7';
+            
+            viewer.loadStructureFromUrl(
+                `https://files.rcsb.org/download/${{pdbId}}.pdb`,
+                'pdb'
+            ).then(() => {{
+                console.log('Structure loaded successfully');
+                // Add variant highlighting if needed
+                {{
+                    'show_variants' if show_variants else 'false'
+                }} && highlightVariants();
+            }}).catch(err => {{
+                console.error('Failed to load structure:', err);
+                document.getElementById('mol-container').innerHTML = 
+                    '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #666;">'
+                    + '<p>🔄 Loading {gene} structure (PDB: ' + pdbId.toUpperCase() + ')...</p></div>';
+            }});
+            
+            function highlightVariants() {{
+                // Mock variant highlighting
+                console.log('Highlighting clinical variants for {gene}');
+            }}
+        </script>
+        """
+        
+        st.components.v1.html(mol_html, height=520)
 
 elif page == "Reports":
     st.header("📊 Clinical Reports")

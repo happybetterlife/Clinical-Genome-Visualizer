@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Clinical Genome Visualizer - Mol* powered 3D visualization of genetic variants">
+    <meta name="keywords" content="genome, visualization, mol*, clinical, variants, 3D">
+    <title>Clinical Genome Visualizer - Mol* Edition</title>
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/molstar@latest/build/viewer/molstar.css">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🧬</text></svg>">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <h1>🧬 Clinical Genome Visualizer</h1>
+            <p style="text-align: center; color: rgba(255,255,255,0.9); margin: 0;">
+                Mol* WebGL Engine | Real-time 3D Visualization | HIPAA Compliant
+            </p>
+        </div>
+    </header>
+
+    <!-- Main Application -->
+    <div class="main-grid">
+        <!-- Patient Panel -->
+        <aside class="panel" id="patient-panel">
+            <div class="panel-header">
+                <h2 class="panel-title">👤 Patient Information</h2>
+            </div>
+            <div class="panel-body">
+                <form id="patient-form">
+                    <div class="form-group">
+                        <label class="form-label">Patient ID</label>
+                        <input type="text" class="form-input" id="patient-id" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-input" id="patient-name" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Birth Date</label>
+                        <input type="date" class="form-input" id="patient-birth">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Sex</label>
+                        <select class="form-select" id="patient-sex">
+                            <option value="F">Female</option>
+                            <option value="M">Male</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Clinical Diagnosis</label>
+                        <textarea class="form-textarea" id="clinical-diagnosis"></textarea>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-block">
+                        💾 Save Patient
+                    </button>
+                </form>
+                
+                <hr style="margin: 20px 0; border-color: rgba(255,255,255,0.1);">
+                
+                <h3>🧬 Add Variant</h3>
+                <form id="variant-form">
+                    <div class="form-group">
+                        <label class="form-label">Gene</label>
+                        <select class="form-select" id="variant-gene">
+                            <option value="BRCA1">BRCA1</option>
+                            <option value="BRCA2">BRCA2</option>
+                            <option value="TP53">TP53</option>
+                            <option value="EGFR">EGFR</option>
+                            <option value="KRAS">KRAS</option>
+                            <option value="PIK3CA">PIK3CA</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Protein Change</label>
+                        <input type="text" class="form-input" id="variant-change" placeholder="p.Arg175His">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">VAF (%)</label>
+                        <input type="number" class="form-input" id="variant-vaf" min="0" max="100" value="50">
+                    </div>
+                    
+                    <button type="submit" class="btn btn-block btn-secondary">
+                        ➕ Add Variant
+                    </button>
+                </form>
+            </div>
+        </aside>
+
+        <!-- Mol* Viewer -->
+        <main id="molstar-viewer">
+            <div class="viewer-controls">
+                <button class="viewer-btn" onclick="app.showDensityMap()">
+                    🔬 Density
+                </button>
+                <button class="viewer-btn" onclick="app.showAlphaFold()">
+                    🤖 AlphaFold
+                </button>
+                <button class="viewer-btn" onclick="app.showClinicalVariants()">
+                    💊 Clinical
+                </button>
+                <button class="viewer-btn" onclick="app.showDrugBinding()">
+                    💉 Drugs
+                </button>
+                <button class="viewer-btn" onclick="app.resetView()">
+                    🔄 Reset
+                </button>
+                <button class="viewer-btn" onclick="app.takeScreenshot()">
+                    📸 Screenshot
+                </button>
+            </div>
+            
+            <div class="loading-overlay" id="loading">
+                <div class="dna-spinner"></div>
+                <p style="margin-top: 20px;">Loading structure...</p>
+            </div>
+        </main>
+
+        <!-- Analysis Panel -->
+        <aside class="panel" id="analysis-panel">
+            <div class="panel-header">
+                <h2 class="panel-title">📊 Analysis Results</h2>
+            </div>
+            <div class="panel-body">
+                <!-- Statistics -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="total-variants">0</div>
+                        <div class="stat-label">Total</div>
+                    </div>
+                    <div class="stat-card" style="border-color: var(--pathogenic);">
+                        <div class="stat-value" style="color: var(--pathogenic);" id="pathogenic-count">0</div>
+                        <div class="stat-label">Pathogenic</div>
+                    </div>
+                    <div class="stat-card" style="border-color: var(--vus);">
+                        <div class="stat-value" style="color: var(--vus);" id="vus-count">0</div>
+                        <div class="stat-label">VUS</div>
+                    </div>
+                    <div class="stat-card" style="border-color: var(--benign);">
+                        <div class="stat-value" style="color: var(--benign);" id="benign-count">0</div>
+                        <div class="stat-label">Benign</div>
+                    </div>
+                </div>
+                
+                <!-- Variants List -->
+                <h3 style="margin-top: 20px;">🧬 Detected Variants</h3>
+                <div id="variants-list">
+                    <!-- Variants will be added here dynamically -->
+                </div>
+                
+                <!-- Recommendations -->
+                <h3 style="margin-top: 20px;">⚕️ Clinical Recommendations</h3>
+                <div id="recommendations">
+                    <div class="alert alert-info">
+                        No pathogenic variants detected yet.
+                    </div>
+                </div>
+                
+                <!-- Action Buttons -->
+                <div style="margin-top: 20px;">
+                    <button class="btn btn-block" onclick="app.generateReport()">
+                        📄 Generate Report
+                    </button>
+                    <button class="btn btn-block btn-secondary" style="margin-top: 10px;" onclick="app.exportData()">
+                        💾 Export Data
+                    </button>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- WebSocket Status -->
+    <div id="ws-status" style="position: fixed; bottom: 20px; right: 20px; padding: 10px 15px; background: rgba(0,0,0,0.8); border-radius: 20px; display: flex; align-items: center; gap: 10px;">
+        <div id="ws-indicator" style="width: 10px; height: 10px; border-radius: 50%; background: #ff4444;"></div>
+        <span style="font-size: 0.85rem; color: #aaa;">Disconnected</span>
+    </div>
+
+    <!-- Notification Container -->
+    <div id="notifications" style="position: fixed; top: 100px; right: 20px; z-index: 10000; max-width: 350px;">
+        <!-- Notifications will appear here -->
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/molstar@latest/build/viewer/molstar.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="app.js"></script>
+    
+    <script>
+        // Initialize application
+        document.addEventListener('DOMContentLoaded', () => {
+            window.app = new ClinicalGenomeApp();
+            app.init();
+        });
+    </script>
+</body>
+</html>

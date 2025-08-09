@@ -1,0 +1,240 @@
+version: '3.9'
+
+services:
+  # FastAPI Backend
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: genome-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app/backend
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+      - ./models:/app/models
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/genome_db
+      - REDIS_URL=redis://redis:6379/0
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - S3_ENDPOINT=http://minio:9000
+    depends_on:
+      - postgres
+      - redis
+      - elasticsearch
+      - minio
+    networks:
+      - genome-network
+    restart: unless-stopped
+
+  # Frontend (Nginx + Static Files)
+  frontend:
+    image: nginx:alpine
+    container_name: genome-frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./frontend:/usr/share/nginx/html
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - backend
+    networks:
+      - genome-network
+    restart: unless-stopped
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: genome-postgres
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=genome_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - genome-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: genome-redis
+    command: redis-server --appendonly yes --requirepass redis_password
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - genome-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ElasticSearch
+  elasticsearch:
+    image: elasticsearch:8.11.1
+    container_name: genome-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - genome-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # MinIO (S3-compatible storage)
+  minio:
+    image: minio/minio:latest
+    container_name: genome-minio
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=minio_admin
+      - MINIO_ROOT_PASSWORD=minio_password
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - genome-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # Celery Worker (for background tasks)
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: genome-celery-worker
+    command: celery -A backend.tasks worker --loglevel=info
+    volumes:
+      - ./backend:/app/backend
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/genome_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - genome-network
+    restart: unless-stopped
+
+  # Celery Beat (for scheduled tasks)
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: genome-celery-beat
+    command: celery -A backend.tasks beat --loglevel=info
+    volumes:
+      - ./backend:/app/backend
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+    depends_on:
+      - redis
+    networks:
+      - genome-network
+    restart: unless-stopped
+
+  # Prometheus (Monitoring)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: genome-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    ports:
+      - "9090:9090"
+    networks:
+      - genome-network
+    restart: unless-stopped
+
+  # Grafana (Visualization)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: genome-grafana
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin_password
+      - GF_INSTALL_PLUGINS=
+    ports:
+      - "3000:3000"
+    networks:
+      - genome-network
+    restart: unless-stopped
+
+  # Backup Service
+  backup:
+    image: postgres:15-alpine
+    container_name: genome-backup
+    volumes:
+      - ./backups:/backups
+      - postgres_data:/var/lib/postgresql/data:ro
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          pg_dump -h postgres -U postgres genome_db > /backups/backup_$$(date +%Y%m%d_%H%M%S).sql
+          find /backups -name "backup_*.sql" -mtime +7 -delete
+          sleep 86400
+        done
+    depends_on:
+      - postgres
+    networks:
+      - genome-network
+    restart: unless-stopped
+
+networks:
+  genome-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  elasticsearch_data:
+  minio_data:
+  prometheus_data:
+  grafana_data:

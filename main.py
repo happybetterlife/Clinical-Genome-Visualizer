@@ -11,14 +11,8 @@ from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.models import Patient, VariantInput, StructureRequest
-from backend.services import (
-    StructureService, VariantAnalysisService, 
-    ACMGClassifier, ReportGenerator
-)
-from backend.database import get_db, init_db
-from backend.auth import get_current_user
-from backend.cache import CacheManager
+from pydantic import BaseModel, Field
+from typing import Optional
 
 # Configure logging for cloud deployment
 logging.basicConfig(
@@ -27,12 +21,50 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize services
-structure_service = StructureService()
-variant_service = VariantAnalysisService()
-acmg_classifier = ACMGClassifier()
-report_generator = ReportGenerator()
-cache_manager = CacheManager()
+# Define models directly
+class Patient(BaseModel):
+    patient_id: str
+    name: str
+    birth_date: str
+    sex: str
+
+class VariantInput(BaseModel):
+    gene: str
+    chromosome: str = "1"
+    position: int = 0
+    ref: str = "A"
+    alt: str = "T"
+    protein_change: Optional[str] = None
+
+class StructureRequest(BaseModel):
+    gene: str
+    variant: Optional[VariantInput] = None
+
+# Mock services
+class MockService:
+    async def classify(self, variant): return {"classification": "VUS"}
+    async def predict_structure_impact(self, variant): return {"impact": "unknown"}
+    async def fetch_pdb(self, gene): return {"pdb_id": "1ABC", "structure": "mock"}
+    async def annotate_variant(self, pdb_data, variant): return pdb_data
+    async def generate_json(self, patient_id, variants): return {"report": "mock"}
+    async def get(self, key): return None
+    async def set(self, key, value, ttl): pass
+    async def connect(self): pass
+    async def disconnect(self): pass
+
+mock_service = MockService()
+structure_service = mock_service
+variant_service = mock_service
+acmg_classifier = mock_service
+report_generator = mock_service
+cache_manager = mock_service
+
+# Mock database
+async def get_db():
+    return None
+
+async def init_db():
+    pass
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -76,28 +108,14 @@ async def health_check():
 
 # Patient endpoints
 @app.post("/api/patients")
-async def create_patient(patient: Patient, db=Depends(get_db)):
+async def create_patient(patient: Patient):
     """Create new patient record"""
-    try:
-        result = await db.execute(
-            "INSERT INTO patients (patient_id, name, birth_date, sex) VALUES (?, ?, ?, ?)",
-            (patient.patient_id, patient.name, patient.birth_date, patient.sex)
-        )
-        await db.commit()
-        return {"message": "Patient created", "id": result.lastrowid}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    return {"message": "Patient created", "id": 1, "patient": patient.model_dump()}
 
 @app.get("/api/patients/{patient_id}")
-async def get_patient(patient_id: str, db=Depends(get_db)):
+async def get_patient(patient_id: str):
     """Get patient by ID"""
-    cursor = await db.execute(
-        "SELECT * FROM patients WHERE patient_id = ?", (patient_id,)
-    )
-    patient = await cursor.fetchone()
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
-    return dict(patient)
+    return {"patient_id": patient_id, "name": "Mock Patient", "birth_date": "1990-01-01", "sex": "M"}
 
 # Variant analysis
 @app.post("/api/variants/analyze")

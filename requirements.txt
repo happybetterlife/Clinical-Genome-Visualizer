@@ -40,8 +40,8 @@ websockets==12.0
 # Rate Limiting
 slowapi==0.1.9
 
-# Basic bioinformatics
-biopython==1.85
+# Basic bioinformatics (requires system libraries)
+# biopython==1.85
 
 # Development
 ipython==8.19.0

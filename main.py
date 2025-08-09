@@ -150,44 +150,48 @@ elif page == "3D Visualization":
         
         pdb_id = gene_structures.get(gene, '1jm7')
         
-        # Create HTML with Mol* viewer
+        # Create HTML with NGL viewer (lightweight and reliable)
         viewer_html = f"""
-        <div style="width: 100%; height: 500px; border: 1px solid #ddd; border-radius: 5px; position: relative;">
-            <div id="molstar-container" style="width: 100%; height: 100%;"></div>
+        <div style="width: 100%; height: 500px; border: 1px solid #ddd; border-radius: 5px; position: relative; background: #000;">
+            <div id="viewport" style="width: 100%; height: 100%;"></div>
         </div>
         
-        <script src="https://molstar.org/viewer/molstar.js"></script>
-        <link rel="stylesheet" href="https://molstar.org/viewer/molstar.css">
+        <script src="https://unpkg.com/ngl@2.0.0-dev.37/dist/ngl.js"></script>
         <script>
             document.addEventListener('DOMContentLoaded', function() {{
-                const container = document.getElementById('molstar-container');
+                // Create NGL stage
+                var stage = new NGL.Stage('viewport', {{
+                    backgroundColor: 'black'
+                }});
                 
-                // Show loading
-                container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #666;">🔄 Loading Mol* viewer...</div>';
-                
-                // Initialize Mol* viewer
-                molstar.Viewer.create(container, {{
-                    layoutIsExpanded: false,
-                    layoutShowControls: true,
-                    layoutShowRemoteState: false,
-                    layoutShowSequence: true,
-                    layoutShowLog: false,
-                    layoutShowLeftPanel: true,
-                    viewportShowExpand: true
-                }}).then(function(viewer) {{
-                    // Load PDB structure
-                    const url = `https://files.rcsb.org/download/{pdb_id}.pdb`;
-                    viewer.loadStructureFromUrl(url, 'pdb', false).then(function() {{
-                        console.log('Structure loaded: {gene} (PDB: {pdb_id.upper()})');
-                        viewer.visual.reset();
-                        viewer.visual.update();
-                    }}).catch(function(err) {{
-                        console.error('Load error:', err);
-                        container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #e74c3c;">⚠️ Failed to load structure</div>';
+                // Load PDB structure
+                stage.loadFile('https://files.rcsb.org/download/{pdb_id}.pdb').then(function(component) {{
+                    // Add cartoon representation
+                    component.addRepresentation('cartoon', {{
+                        color: 'chainname'
                     }});
+                    
+                    // Add variant highlights if enabled
+                    {'true' if show_variants else 'false'} && component.addRepresentation('ball+stick', {{
+                        sele: '61 or 185 or 1775',
+                        color: 'red'
+                    }});
+                    
+                    // Auto view
+                    component.autoView();
+                    
+                    console.log('Structure loaded: {gene} (PDB: {pdb_id.upper()})');
                 }}).catch(function(err) {{
-                    console.error('Viewer error:', err);
-                    container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #e74c3c;">⚠️ Mol* viewer failed</div>';
+                    console.error('Load error:', err);
+                    document.getElementById('viewport').innerHTML = 
+                        '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #fff; flex-direction: column;">'
+                        + '<div>⚠️ Structure not available</div>'
+                        + '<small>{gene} | PDB: {pdb_id.upper()}</small></div>';
+                }});
+                
+                // Handle window resize
+                window.addEventListener('resize', function() {{
+                    stage.handleResize();
                 }});
             }});
         </script>
@@ -196,7 +200,7 @@ elif page == "3D Visualization":
         st.components.v1.html(viewer_html, height=520)
         
         # Structure info
-        st.info(f"🧬 **{gene}** structure from PDB: {pdb_id.upper()} | Controls: Mouse=Rotate, Wheel=Zoom, Right-click=Pan")
+        st.info(f"🧬 **{gene}** structure from PDB: {pdb_id.upper()} | Mouse: rotate, wheel: zoom, right-click: pan")
 
 elif page == "Reports":
     st.header("📊 Clinical Reports")

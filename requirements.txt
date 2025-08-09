@@ -12,11 +12,11 @@ elasticsearch==8.11.1
 sqlalchemy==2.0.25
 alembic==1.13.1
 
-# Bioinformatics
-biopython==1.83
-pysam==0.22.0
-cyvcf2==0.30.28  # Fast VCF parser
-pyBigWig==0.3.22
+# Bioinformatics (optional - install manually if needed)
+# biopython==1.83
+# pysam==0.22.0
+# cyvcf2==0.30.28
+# pyBigWig==0.3.22
 
 # Scientific Computing
 numpy==1.24.3
@@ -24,15 +24,15 @@ pandas==2.1.4
 scipy==1.11.4
 scikit-learn==1.3.2
 
-# Machine Learning
-torch==2.1.2
-transformers==4.36.2  # For protein language models
-xgboost==2.0.3
+# Machine Learning (optional)
+# torch==2.1.2
+# transformers==4.36.2
+# xgboost==2.0.3
 
-# Structure Analysis
-mdtraj==1.9.9
-pymol-open-source==2.5.0
-rdkit==2023.9.4
+# Structure Analysis (optional)
+# mdtraj==1.9.9
+# pymol-open-source==2.5.0
+# rdkit==2023.9.4
 
 # API Clients
 httpx==0.25.2

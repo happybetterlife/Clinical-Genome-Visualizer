@@ -301,4 +301,4 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 ---
 
-**Made with ❤️ by the Clinical Genome Team**
+**Made with ❤️ by the Clinical Genome Team**# Clinical-Genome-Visualizer

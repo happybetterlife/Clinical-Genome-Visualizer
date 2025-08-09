@@ -9,6 +9,7 @@ sqlalchemy>=2.0.35
 aiosqlite==0.21.0
 redis==5.0.1
 greenlet==3.2.4
+pymongo==4.6.1
 
 # Scientific Computing
 numpy>=1.26.0

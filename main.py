@@ -240,9 +240,5 @@ async def websocket_endpoint(websocket: WebSocket, patient_id: str):
     finally:
         manager.disconnect(websocket)
 
-if __name__ == "__main__":
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000
-    )
+# For Streamlit Cloud deployment, remove uvicorn.run
+# The app will be served by the cloud platform
